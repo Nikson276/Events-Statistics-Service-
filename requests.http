@@ -3,15 +3,18 @@ POST http://0.0.0.0:8000/events/
 content-type: application/json
 
 {
-    "id": "event123",
-    "user_id": "user456",
-    "track_id": "track789",
-    "timestamp": "2023-01-01T12:00:00Z"
+    "id": "event2test",
+    "user_id": "nikson276",
+    "track_id": "track101",
+    "timestamp": "2025-11-29T19:12:00Z"
 }
 
 ###
 
 GET http://0.0.0.0:8000/config/
+
+###
+GET http://0.0.0.0:8000/events/
 
 ###
 

@@ -4,7 +4,7 @@ from datetime import datetime
 from fastapi.testclient import TestClient
 from ess.app.main import app
 from ess.app.schemas.event import Event
-from ess.app.services.kafka import KafkaProducerService
+from ess.app.services.kafka_producer import KafkaProducerService
 from ess.app.services.clickhouse import ClickHouseService
 
 

@@ -1,5 +1,6 @@
 venv/
 /venv
+.venv/
 
 # Python bytecode
 __pycache__/

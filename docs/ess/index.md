@@ -41,7 +41,6 @@ ESS это микросервис для хранения событий с ис
 
 [Диаграмма контейнеров (C4 Level 2)](https://nikson276.github.io/SystemDesign/#/./05_building_block_view?id=%f0%9f%93%a6-%d0%9e%d0%bf%d0%b8%d1%81%d0%b0%d0%bd%d0%b8%d0%b5-%d0%ba%d0%be%d0%bd%d1%82%d0%b5%d0%b9%d0%bd%d0%b5%d1%80%d0%be%d0%b2)
 
-
 ## Запуск
 
 Kafka
@@ -56,9 +55,9 @@ Fast API
 python -m ess.app.main
 ```
 
-### 
+###
 
-## Техническая реализация 
+## Техническая реализация
 
 ### Подготовка и разработка чернового варианта
 
