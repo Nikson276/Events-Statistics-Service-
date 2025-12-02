@@ -2,11 +2,11 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     """Application settings loaded from environment or .env file."""
-    kafka_bootstrap_servers: str = "localhost:9092"
+    kafka_bootstrap_servers: str = "localhost:9094"
     kafka_topic: str = "nikson-test"
     clickhouse_host: str = "localhost"
     clickhouse_port: int = 9000
-    clickhouse_database: str = "default"
+    clickhouse_database: str = "example"
     clickhouse_table: str = "events"
 
     class Config:

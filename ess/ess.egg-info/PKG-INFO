@@ -1,0 +1,10 @@
+Metadata-Version: 2.4
+Name: ess
+Version: 0.1.0
+Requires-Dist: fastapi>=0.85.0
+Requires-Dist: uvicorn[standard]>=0.18.0
+Requires-Dist: kafka-python>=2.0.2
+Requires-Dist: clickhouse-driver>=0.2.0
+Requires-Dist: pydantic>=1.10.0
+Requires-Dist: pydantic_settings>=2.0.0
+Requires-Dist: pytest>=7.0.0

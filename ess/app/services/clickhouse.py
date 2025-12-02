@@ -1,5 +1,6 @@
 import os
 from datetime import datetime
+from typing import Union, List
 from clickhouse_driver import Client
 from ess.app.schemas.event import Event
 from ess.app.config import settings
@@ -37,3 +38,19 @@ class ClickHouseService:
                 Event(id=id_, user_id=user_id, track_id=track_id, timestamp=timestamp)
             )
         return events
+
+    def insert_events(self, events: Union[Event, List[Event]]) -> None:
+        """Insert one or more events into ClickHouse table."""
+        # Приведение к списку
+        event_list = [events] if isinstance(events, Event) else events
+        if not event_list:
+            return
+
+        data = [
+            (e.id, e.user_id, e.track_id, e.timestamp)
+            for e in event_list
+        ]
+
+        query = f"INSERT INTO {self.database}.{self.table} (id, user_id, track_id, timestamp) VALUES"
+
+        self.client.execute(query, data)

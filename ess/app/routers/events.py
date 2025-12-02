@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 
 from ess.app.schemas.event import Event
-from ess.app.services.kafka import KafkaProducerService
+from ess.app.services.kafka_producer import KafkaProducerService
 from ess.app.services.clickhouse import ClickHouseService
 
 

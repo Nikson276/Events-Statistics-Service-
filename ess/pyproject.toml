@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ess"
+version = "0.1.0"
+dependencies = [
+    "fastapi>=0.85.0",
+    "uvicorn[standard]>=0.18.0",
+    "kafka-python>=2.0.2",
+    "clickhouse-driver>=0.2.0",
+    "pydantic>=1.10.0",
+    "pydantic_settings>=2.0.0",
+    "pytest>=7.0.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]      # искать пакеты в текущей директории
+include = ["ess*"] # включать только то, что начинается с "ess"

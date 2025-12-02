@@ -41,8 +41,9 @@ ESS это микросервис для хранения событий с ис
 
 [Диаграмма контейнеров (C4 Level 2)](https://nikson276.github.io/SystemDesign/#/./05_building_block_view?id=%f0%9f%93%a6-%d0%9e%d0%bf%d0%b8%d1%81%d0%b0%d0%bd%d0%b8%d0%b5-%d0%ba%d0%be%d0%bd%d1%82%d0%b5%d0%b9%d0%bd%d0%b5%d1%80%d0%be%d0%b2)
 
+## Техническая реализация
 
-## Запуск
+### Запуск
 
 Kafka
 
@@ -56,22 +57,48 @@ Fast API
 python -m ess.app.main
 ```
 
-### 
+### Sequence Diagram: Event Flow
 
-## Техническая реализация 
+```plantuml
+@startuml
+    participant Client
+    participant FastAPI
+    participant Kafka
+    participant Consumer
+    participant ClickHouse
 
-### Подготовка и разработка чернового варианта
+    Client->>FastAPI: POST /events {event}
+    FastAPI->>Kafka: Produce to 'events' topic
+    Kafka-->>FastAPI: Ack
+    FastAPI-->>Client: 200 OK
+
+    loop Consume loop
+        Consumer->>Kafka: Poll message
+        Kafka-->>Consumer: event JSON
+        Consumer->>ClickHouse: INSERT INTO events
+        ClickHouse-->>Consumer: OK
+        Consumer->>Kafka: Commit offset
+    end
+
+    Client->>FastAPI: GET /events
+    FastAPI->>ClickHouse: SELECT ...
+    ClickHouse-->>FastAPI: rows
+    FastAPI-->>Client: JSON list
+@enduml
+```
+
+### Лог задач
 
 **Цель:** Разработать черновой вариант микросервиса, обеспечивающего приём и хранение событий.
 
 **Самостоятельно**
 
-- [ ] Развернуть Очередь и ClickHouse
-- [ ] Реализовать REST API, принимающий события и передающий их в Kafka
-- [ ] Реализовать продюсер, который отправляет тестовые события
-- [ ] Реализовать консьюмер, который читает события и записывает их в ClickHouse
-- [ ] Разработать API-эндпоинт для запроса событий из ClickHouse
-- [ ] Описать схемы данных и механизмы обработки событий
+- [x] Развернуть Очередь и ClickHouse
+- [x] Реализовать REST API, принимающий события и передающий их в Kafka
+- [x] Реализовать продюсер, который отправляет тестовые события
+- [x] Реализовать консьюмер, который читает события и записывает их в ClickHouse
+- [x] Разработать API-эндпоинт для запроса событий из ClickHouse
+- [x] Описать схемы данных и механизмы обработки событий
 
 **С ментором**
 
