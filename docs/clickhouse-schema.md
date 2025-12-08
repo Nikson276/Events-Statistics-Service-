@@ -22,3 +22,7 @@ PARTITION BY toYYYYMM(timestamp);
 > - `ORDER BY (timestamp, id)` — оптимизация для временных запросов.
 > - `PARTITION BY toYYYYMM` — упрощает удаление старых данных.
 
+
+
+- Добавить метку времени вставки 
+- 

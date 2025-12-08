@@ -4,7 +4,7 @@ from datetime import datetime
 from fastapi.testclient import TestClient
 from ess.app.main import app
 from ess.app.schemas.event import Event
-from ess.app.services.kafka_producer import KafkaProducerService
+from ess.app.services.kafka_producer import KafkaProducerService, get_kafka_producer
 from ess.app.services.clickhouse import ClickHouseService
 
 
@@ -83,3 +83,11 @@ def test_list_events_success(client, override_dependencies):
     data = response.json()
     expected = [e.dict() for e in fake_clickhouse.events]
     assert data == expected
+
+# def test_create_event():
+#     mock_producer = Mock()
+#     app.dependency_overrides[get_kafka_producer] = lambda: mock_producer
+    
+#     response = client.post("/events/", json={...})
+    
+#     mock_producer.send.assert_called_once()
