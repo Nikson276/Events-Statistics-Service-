@@ -3,15 +3,19 @@ venv/
 .venv/
 
 # Python bytecode
+*.pid
 __pycache__/
-*.py[cod]
+*.pyc
+
 # IDE files
 .idea/
 .vscode/
 .history/
 
 # Environment variables
-.env
+
+.env.local
+
 # Logs
 logs/
 *.log

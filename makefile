@@ -18,10 +18,10 @@ setup-kafka:
 	@echo "🚀 Starting Kafka cluster..."
 	@cd kafka-cluster && docker compose up -d
 	@sleep 5
-	@echo "📦 Creating Kafka topic 'events'..."
+	@echo "📦 Creating Kafka topic 'nikson-test'..."
 	@cd kafka-cluster && docker compose exec -T kafka-0 \
 		/opt/kafka/bin/kafka-topics.sh --create \
-			--topic events \
+			--topic nikson-test \
 			--bootstrap-server localhost:9094 \
 			--partitions 3 \
 			--replication-factor 3
