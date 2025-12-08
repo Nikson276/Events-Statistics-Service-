@@ -25,7 +25,7 @@ async def init_kafka_producer() -> None:
                 # Для ещё большего throughput
                 linger_ms=10,          # группировать дольше → больше batch
                 batch_size=65536,      # 64 KB вместо 16 KB
-                compression_type="lz4", # сжатие → меньше сетевого трафика
+                # compression_type="lz4", # сжатие → меньше сетевого трафика
                 acks=1,                # оставить (acks=all убьёт latency)
                 retries=3,
             )
