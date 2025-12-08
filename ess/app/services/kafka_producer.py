@@ -22,10 +22,11 @@ async def init_kafka_producer() -> None:
             lambda: KafkaProducer(
                 bootstrap_servers=settings.kafka_bootstrap_servers,
                 value_serializer=lambda v: json.dumps(v, default=str).encode("utf-8"),
-                # Оптимизации для highload:
-                linger_ms=5,          # группировать сообщения 5 мс
-                batch_size=16384,     # 16 KB batch
-                acks=1,               # подтверждение от лидера
+                # Для ещё большего throughput
+                linger_ms=10,          # группировать дольше → больше batch
+                batch_size=65536,      # 64 KB вместо 16 KB
+                compression_type="lz4", # сжатие → меньше сетевого трафика
+                acks=1,                # оставить (acks=all убьёт latency)
                 retries=3,
             )
         )

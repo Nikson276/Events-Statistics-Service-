@@ -79,6 +79,11 @@ services:
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT,PLAINTEXT:PLAINTEXT"
       KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
       KAFKA_LOG_DIRS: "/var/lib/kafka/data"
+      KAFKA_CFG_NUM_NETWORK_THREADS: 3
+      KAFKA_CFG_NUM_IO_THREADS: 8
+      KAFKA_CFG_SOCKET_SEND_BUFFER_BYTES: 1024000
+      KAFKA_CFG_SOCKET_RECEIVE_BUFFER_BYTES: 1024000
+      KAFKA_CFG_NUM_REPLICA_FETCHERS: 2
     volumes:
       - kafka_0_data:/var/lib/kafka/data
     networks:
@@ -100,6 +105,11 @@ services:
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT,PLAINTEXT:PLAINTEXT"
       KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
       KAFKA_LOG_DIRS: "/var/lib/kafka/data"
+      KAFKA_CFG_NUM_NETWORK_THREADS: 3
+      KAFKA_CFG_NUM_IO_THREADS: 8
+      KAFKA_CFG_SOCKET_SEND_BUFFER_BYTES: 1024000
+      KAFKA_CFG_SOCKET_RECEIVE_BUFFER_BYTES: 1024000
+      KAFKA_CFG_NUM_REPLICA_FETCHERS: 2
     volumes:
       - kafka_1_data:/var/lib/kafka/data
     networks:
@@ -121,6 +131,11 @@ services:
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT,PLAINTEXT:PLAINTEXT"
       KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
       KAFKA_LOG_DIRS: "/var/lib/kafka/data"
+      KAFKA_CFG_NUM_NETWORK_THREADS: 3
+      KAFKA_CFG_NUM_IO_THREADS: 8
+      KAFKA_CFG_SOCKET_SEND_BUFFER_BYTES: 1024000
+      KAFKA_CFG_SOCKET_RECEIVE_BUFFER_BYTES: 1024000
+      KAFKA_CFG_NUM_REPLICA_FETCHERS: 2
     volumes:
       - kafka_2_data:/var/lib/kafka/data
     networks:
@@ -150,11 +165,6 @@ services:
       - KAFKA_BOOTSTRAP_SERVERS=kafka-0:9092
       - CLICKHOUSE_HOST=clickhouse-node1
       - CLICKHOUSE_PORT=9000
-    # depends_on:
-    #   kafka-0:
-    #     condition: service_healthy
-    #   clickhouse-node1:
-    #     condition: service_healthy
     command: ["python", "-m", "ess.scripts.init_all"]
 
   # =============== FASTAPI ===============
