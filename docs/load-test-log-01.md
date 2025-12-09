@@ -150,7 +150,7 @@ await loop.run_in_executor(None, self.producer.send, ...)
 
 1. **ess/kafka_consumer/consumer.py**: переписан на `aiokafka` — полностью асинхронный.
    1. В **_process_message**: добавлен Замер времени доставки `API→ClickHouse latency`
-2. **ess/app/services/kafka_producer.py**: использует `aiokafka`
+2. **ess/app/services/kafka.py**: Вынес инициализацию кафки отдельно, переименовал producer, теперь использует `aiokafka` и является singleton
    1. `send_and_wait()` — если нужна гарантия доставки,
    2. `send()` — если fire-and-forget.
 3. **ess/app/main.py**: новый продюсер интегрирован в FastAPI (lifespan)
