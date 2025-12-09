@@ -1,13 +1,10 @@
 # main_consumer.py
 import asyncio
-from .consumer import KafkaConsumerService
+from .consumer import AsyncKafkaConsumerService
 
 async def main():
-    consumer = KafkaConsumerService()
-    try:
-        await consumer.start_consuming()
-    except KeyboardInterrupt:
-        consumer.stop()
+    consumer = AsyncKafkaConsumerService()
+    await consumer.start_consuming()
 
 if __name__ == "__main__":
     asyncio.run(main())

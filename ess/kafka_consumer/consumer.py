@@ -1,71 +1,52 @@
+# ess/kafka_consumer/consumer.py
 import asyncio
 import json
-from kafka import KafkaConsumer
+from aiokafka import AIOKafkaConsumer
+from datetime import datetime, timezone
 from ess.app.schemas.event import Event
 from ess.app.config import settings
 from ess.app.services.clickhouse import ClickHouseService
 
 
-class KafkaConsumerService:
-    """Service for consuming events from Kafka topic and saving to ClickHouse."""
-
+class AsyncKafkaConsumerService:
     def __init__(self):
-        self.bootstrap_servers = settings.kafka_bootstrap_servers
-        self.topic = settings.kafka_topic
-        # Используем kafka-python
-        self.consumer = KafkaConsumer(
-            self.topic,
-            bootstrap_servers=self.bootstrap_servers,
-            auto_offset_reset='earliest',
-            group_id='event-statistics-service',
-            enable_auto_commit=False,  # ⚠️ коммитим сами!
-            value_deserializer=lambda x: x.decode('utf-8'),  # декодируем байты → строка
+        self.consumer = AIOKafkaConsumer(
+            settings.kafka_topic,
+            bootstrap_servers=settings.kafka_bootstrap_servers,
+            group_id="event-statistics-service",
+            auto_offset_reset="earliest",
+            enable_auto_commit=False,
         )
         self.clickhouse = ClickHouseService()
-        self.running = True
 
-    async def start_consuming(self) -> None:
-        """Start consuming messages from Kafka and store them in ClickHouse."""
-        print(f"✅ Kafka consumer started. Listening to topic: {self.topic}")
+    async def start_consuming(self):
+        await self.consumer.start()
+        print(f"✅ Async Kafka consumer started. Listening to topic: {settings.kafka_topic}")
 
         try:
-            # kafka-python consumer — итерируемый объект
-            for message in self.consumer:
-                if not self.running:
-                    break
-                await self._process_message(message)
-
-        except Exception as e:
-            print(f"💥 Kafka consumer error: {e}")
-            raise
+            async for msg in self.consumer:
+                await self._process_message(msg)
         finally:
-            self.consumer.close()
+            await self.consumer.stop()
 
-    def stop(self) -> None:
-        """Gracefully stop the consumer."""
-        print("🛑 Stopping Kafka consumer...")
-        self.running = False
-
-    async def _process_message(self, message) -> None:
-        """Deserialize and store a single message."""
+    async def _process_message(self, msg):
         try:
-            # message.value — уже строка (благодаря value_deserializer)
-            payload = json.loads(message.value)
+            payload = json.loads(msg.value.decode("utf-8"))
             event = Event.model_validate(payload)
+
+            # Замер latency
+            latency = (datetime.now(timezone.utc) - event.timestamp).total_seconds()
+            print(f"API→ClickHouse latency: {latency:.2f} sec")
 
             # Запись в ClickHouse (в thread pool)
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(None, self.clickhouse.insert_events, event)
 
-            # ✅ Подтверждаем обработку
-            self.consumer.commit()
+            # Коммит офсета
+            await self.consumer.commit()
             print(f"✅ Processed event: {event.id}")
-
-        except json.JSONDecodeError as e:
-            print(f"❌ Invalid JSON: {e}")
-            self.consumer.commit()  # или не коммитить — зависит от стратегии
 
         except Exception as e:
             print(f"❌ Failed to process message: {e}")
-            # Для dev — коммитим, чтобы не висеть
-            self.consumer.commit()
+            # В продакшене: отправка в DLQ
+            await self.consumer.commit()  # для dev — коммитим

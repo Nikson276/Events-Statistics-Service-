@@ -1,5 +1,6 @@
 fastapi>=0.85.0
 uvicorn[standard]>=0.18.0
+aiokafka>=0.10.0
 kafka-python>=2.0.2
 clickhouse-driver>=0.2.0
 pydantic>=1.10.0

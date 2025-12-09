@@ -12,21 +12,19 @@ export const options = {
     { target: 3000, duration: '30s' },
     { target: 3500, duration: '30s' },
   ],
-  // НЕТ duration, НЕТ vus — они управляются через stages
 }
 
-// ← УБЕРИ `export function scenario_6()` и просто используй:
 export default function () {
   let response
 
   // Post played track message
   response = http.post(
-    'http://nginx:80/events/',  // ← ВАЖНО: внутри Docker — не 0.0.0.0!
+    'http://fastapi:8000/events/',  // ← ВАЖНО: внутри Docker — не 0.0.0.0!
     JSON.stringify({
       id: `event-${__VU}-${__ITER}`,
       timestamp: new Date().toISOString(),
-      track_id: "track789",
-      user_id: "k6"
+      track_id: "test-iteration-001",
+      user_id: "k6-script"
     }),
     { headers: { 'Content-Type': 'application/json' } }
   )

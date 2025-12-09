@@ -144,3 +144,25 @@ await loop.run_in_executor(None, self.producer.send, ...)
 3. Реализуй `AsyncKafkaProducerService`,
 4. Перезапусти тест на **2500 VU**.
 
+## Список изменений
+
+### ✅ Итоговые изменения
+
+1. **ess/kafka_consumer/consumer.py**: переписан на `aiokafka` — полностью асинхронный.
+   1. В **_process_message**: добавлен Замер времени доставки `API→ClickHouse latency`
+2. **ess/app/services/kafka_producer.py**: использует `aiokafka`
+   1. `send_and_wait()` — если нужна гарантия доставки,
+   2. `send()` — если fire-and-forget.
+3. **ess/app/main.py**: новый продюсер интегрирован в FastAPI (lifespan)
+4. **ess/app/routers/events.py**: обновлены эндпоинты
+   1. **POST-эндпоинт**: стал `async` 
+   2. **GET-эндпоинт**: стал `async` + `run_in_executor` для ClickHouse.
+5. **docker-compose**: Удалил nginx service
+6. **load-test.js**: обновил скрипт url для запросов
+
+Теперь  **полностью асинхронный pipeline**:
+
+```bash
+FastAPI (async) → Kafka (aiokafka) → Consumer (async) → ClickHouse (run_in_executor)
+```
+
