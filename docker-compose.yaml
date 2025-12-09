@@ -79,11 +79,11 @@ services:
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT,PLAINTEXT:PLAINTEXT"
       KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
       KAFKA_LOG_DIRS: "/var/lib/kafka/data"
-      KAFKA_CFG_NUM_NETWORK_THREADS: 3
-      KAFKA_CFG_NUM_IO_THREADS: 8
-      KAFKA_CFG_SOCKET_SEND_BUFFER_BYTES: 1024000
-      KAFKA_CFG_SOCKET_RECEIVE_BUFFER_BYTES: 1024000
-      KAFKA_CFG_NUM_REPLICA_FETCHERS: 2
+      KAFKA_CFG_NUM_NETWORK_THREADS: 8
+      KAFKA_CFG_NUM_IO_THREADS: 16
+      KAFKA_CFG_SOCKET_SEND_BUFFER_BYTES: 2097152
+      KAFKA_CFG_SOCKET_RECEIVE_BUFFER_BYTES: 2097152
+      KAFKA_CFG_NUM_REPLICA_FETCHERS: 4
     volumes:
       - kafka_0_data:/var/lib/kafka/data
     networks:
@@ -105,11 +105,11 @@ services:
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT,PLAINTEXT:PLAINTEXT"
       KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
       KAFKA_LOG_DIRS: "/var/lib/kafka/data"
-      KAFKA_CFG_NUM_NETWORK_THREADS: 3
-      KAFKA_CFG_NUM_IO_THREADS: 8
-      KAFKA_CFG_SOCKET_SEND_BUFFER_BYTES: 1024000
-      KAFKA_CFG_SOCKET_RECEIVE_BUFFER_BYTES: 1024000
-      KAFKA_CFG_NUM_REPLICA_FETCHERS: 2
+      KAFKA_CFG_NUM_NETWORK_THREADS: 8
+      KAFKA_CFG_NUM_IO_THREADS: 16
+      KAFKA_CFG_SOCKET_SEND_BUFFER_BYTES: 2097152
+      KAFKA_CFG_SOCKET_RECEIVE_BUFFER_BYTES: 2097152
+      KAFKA_CFG_NUM_REPLICA_FETCHERS: 4
     volumes:
       - kafka_1_data:/var/lib/kafka/data
     networks:
@@ -131,11 +131,11 @@ services:
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT,PLAINTEXT:PLAINTEXT"
       KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
       KAFKA_LOG_DIRS: "/var/lib/kafka/data"
-      KAFKA_CFG_NUM_NETWORK_THREADS: 3
-      KAFKA_CFG_NUM_IO_THREADS: 8
-      KAFKA_CFG_SOCKET_SEND_BUFFER_BYTES: 1024000
-      KAFKA_CFG_SOCKET_RECEIVE_BUFFER_BYTES: 1024000
-      KAFKA_CFG_NUM_REPLICA_FETCHERS: 2
+      KAFKA_CFG_NUM_NETWORK_THREADS: 8
+      KAFKA_CFG_NUM_IO_THREADS: 16
+      KAFKA_CFG_SOCKET_SEND_BUFFER_BYTES: 2097152
+      KAFKA_CFG_SOCKET_RECEIVE_BUFFER_BYTES: 2097152
+      KAFKA_CFG_NUM_REPLICA_FETCHERS: 4
     volumes:
       - kafka_2_data:/var/lib/kafka/data
     networks:
@@ -170,9 +170,9 @@ services:
   # =============== FASTAPI ===============
   fastapi:
     build: .
-    container_name: fastapi
-    ports:
-      - "8000:8000"
+    # container_name: fastapi
+    expose:
+      - "8000"
     environment:
       - KAFKA_BOOTSTRAP_SERVERS=kafka-0:9092
       - KAFKA_TOPIC=nikson-test
@@ -184,6 +184,19 @@ services:
       init-schemas:
         condition: service_completed_successfully
     command: ["uvicorn", "ess.app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "8"]
+
+  # =============== NGINX Balancer ===============
+  nginx:
+    image: nginx:alpine
+    container_name: nginx
+    ports:
+      - "8000:80"  # ← теперь весь трафик идёт через nginx
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+    networks:
+      - ess-net
+    depends_on:
+      - fastapi
 
   # =============== KAFKA CONSUMER ===============
   kafka-consumer:
@@ -215,6 +228,17 @@ services:
       - ess-net
     volumes:
       - pyroscope_:/data  # сохранение данных между перезапусками
+
+  # =============== Grafana K6 ===============
+  k6:
+    image: grafana/k6:latest
+    container_name: k6
+    volumes:
+      - ./k6:/scripts  # монтируем папку со скриптами
+    networks:
+      - ess-net
+    command: ["run", "/scripts/load-test.js"]
+    profiles: ["load-test"]
 
 # =============== VOLUMES ===============
 volumes:

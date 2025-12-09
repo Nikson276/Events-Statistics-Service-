@@ -1,6 +1,8 @@
 import time
 from kafka.admin import KafkaAdminClient, NewTopic
+from kafka.errors import TopicAlreadyExistsError
 from clickhouse_driver import Client
+
 
 def wait_for_kafka():
     print("⏳ Waiting for Kafka...")
@@ -29,15 +31,21 @@ def create_kafka_topic():
     admin = KafkaAdminClient(bootstrap_servers="kafka-0:9092")
     topic = NewTopic(
         name="nikson-test",
-        num_partitions=12,  # достаточно для 500+ RPS
+        num_partitions=36,
         replication_factor=3,
         topic_configs={
             "min.insync.replicas": "2",
-            "compression.type": "lz4",
             "retention.ms": "604800000",  # 7 дней
         }
     )
-    admin.create_topics([topic])
+    try:
+        admin.create_topics([topic])
+        print("✅ Kafka topic created")
+    except TopicAlreadyExistsError:
+        print("ℹ️  Kafka topic already exists — skipping")
+    except Exception as e:
+        print(f"❌ Failed to create Kafka topic: {e}")
+        raise
 
 def create_clickhouse_schema():
     print("🗃️ Creating ClickHouse schema...")
