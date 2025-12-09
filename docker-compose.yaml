@@ -202,11 +202,26 @@ services:
     command: ["python", "-m", "ess.kafka_consumer.main"]
     restart: on-failure
 
+  # =============== Grafana Pyroscope ===============
+  pyroscope:
+    image: grafana/pyroscope:latest
+    container_name: pyroscope
+    ports:
+      - "4040:4040"  # Веб-интерфейс
+      - "4041:4041"  # gRPC API (для агентов)
+    command:
+      - "server"
+    networks:
+      - ess-net
+    volumes:
+      - pyroscope_:/data  # сохранение данных между перезапусками
+
 # =============== VOLUMES ===============
 volumes:
   kafka_0_data:
   kafka_1_data:
   kafka_2_data:
+  pyroscope_:
 
 # =============== NETWORK ===============
 networks:

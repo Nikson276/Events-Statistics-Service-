@@ -1,10 +1,32 @@
 import uvicorn
+import pyroscope
+import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from .services.kafka_producer import kafka_producer_lifespan
 from .routers import events
 from .config import settings
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Инициализация Pyroscope (до FastAPI)
+try:
+    pyroscope.configure(
+        application_name="ess.fastapi",
+        server_address="http://pyroscope:4040",
+        tags={"host": "fastapi"},
+    )
+    logger.info("✅ Pyroscope agent initialized")
+except Exception as e:
+    logger.error(f"❌ Pyroscope init failed: {e}")
+
+# pyroscope.configure(
+#     application_name = "ess.fastapi.app", # replace this with some name for your application
+#     server_address   = "https://profiles-prod-015.grafana.net", # replace this with the address of your Pyroscope server
+#     basic_auth_username = '1457000',
+#     basic_auth_password = settings.grafana_pyroscope,
+# )
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
