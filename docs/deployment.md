@@ -1,20 +1,5 @@
 
-# Как запустить, настроить
-
-Запуск
-
-```bash
-make setup
-make start
-```
-
-Остановка и очистка
-
-```bash
-make clean
-```
-
-## Как использовать
+# Как использовать
 
 ```bash
 # В корне ESS/
@@ -27,18 +12,6 @@ FastAPI: http://localhost:8000
 Kafka UI: http://localhost:8080
 ClickHouse HTTP: http://localhost:8123
 
-## Nginx balancer 
-
-```bash
-# Пересобери (если менял код или requirements.txt)
-docker compose build
-
-# Запусти всё, включая nginx
-docker compose up -d
-
-# Масштабируй fastapi до 3 реплик
-docker compose scale fastapi=3
-```
 
 ## Запуск тестов
 
@@ -47,4 +20,3 @@ docker compose scale fastapi=3
 ```bash
 docker compose run --rm k6
 ```
-

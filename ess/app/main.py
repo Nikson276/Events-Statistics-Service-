@@ -21,12 +21,6 @@ try:
 except Exception as e:
     logger.error(f"❌ Pyroscope init failed: {e}")
 
-# pyroscope.configure(
-#     application_name = "ess.fastapi.app", # replace this with some name for your application
-#     server_address   = "https://profiles-prod-015.grafana.net", # replace this with the address of your Pyroscope server
-#     basic_auth_username = '1457000',
-#     basic_auth_password = settings.grafana_pyroscope,
-# )
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

@@ -15,7 +15,6 @@ async def create_event(
     """Receive event and send to Kafka"""
     try:
         await kafka_service.send_event(event)
-        # await kafka_service.put(event)  # ← очередь в памяти
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     return {"status": "queued"}
