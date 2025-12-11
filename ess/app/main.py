@@ -3,7 +3,7 @@ import pyroscope
 import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
-from .services.kafka import kafka_service, AsyncKafkaProducerService
+from .services.kafka import init_kafka, close_kafka
 from .routers import events
 from .config import settings
 
@@ -21,15 +21,24 @@ try:
 except Exception as e:
     logger.error(f"❌ Pyroscope init failed: {e}")
 
+kafka_service = None
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global kafka_service
-    kafka_service = AsyncKafkaProducerService()
+    # global kafka_service
+    # kafka_service = AsyncKafkaProducerService()
+    # print(f"kafka_service= {kafka_service}")
     # Startup
-    await kafka_service.start()
+    await init_kafka()
+    print("✅ Kafka producer started")
     yield
     # Shutdown
-    await kafka_service.stop()
+    await close_kafka()
+
+async def get_kafka_service():
+    if kafka_service is None:
+        raise RuntimeError("kafka_service Not ready")
+    return kafka_service
 
 app = FastAPI(
     title="ESS Service",
