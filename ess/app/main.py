@@ -21,13 +21,8 @@ try:
 except Exception as e:
     logger.error(f"❌ Pyroscope init failed: {e}")
 
-kafka_service = None
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # global kafka_service
-    # kafka_service = AsyncKafkaProducerService()
-    # print(f"kafka_service= {kafka_service}")
     # Startup
     await init_kafka()
     print("✅ Kafka producer started")
@@ -35,10 +30,6 @@ async def lifespan(app: FastAPI):
     # Shutdown
     await close_kafka()
 
-async def get_kafka_service():
-    if kafka_service is None:
-        raise RuntimeError("kafka_service Not ready")
-    return kafka_service
 
 app = FastAPI(
     title="ESS Service",

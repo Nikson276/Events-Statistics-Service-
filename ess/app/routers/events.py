@@ -2,7 +2,7 @@
 import asyncio
 from fastapi import APIRouter, Depends, HTTPException
 from ess.app.schemas.event import Event
-from ess.app.main import get_kafka_service
+from ess.app.services.kafka import get_kafka_service
 from ess.app.services.clickhouse import ClickHouseService
 
 
