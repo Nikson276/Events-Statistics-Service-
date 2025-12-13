@@ -1,3 +1,4 @@
+# ess/scripts/init_all.py
 import time
 from kafka.admin import KafkaAdminClient, NewTopic
 from kafka.errors import TopicAlreadyExistsError
@@ -56,10 +57,11 @@ def create_clickhouse_schema():
             id String,
             user_id String,
             track_id String,
-            timestamp DateTime64(3, 'UTC')
+            ingest_time DateTime64(3, 'UTC'),
+            store_time DateTime64(3, 'UTC')
         ) ENGINE = MergeTree
-        ORDER BY (timestamp, id)
-        PARTITION BY toYYYYMM(timestamp)
+        ORDER BY (ingest_time, id)
+        PARTITION BY toYYYYMM(ingest_time)
     """)
 
 if __name__ == "__main__":

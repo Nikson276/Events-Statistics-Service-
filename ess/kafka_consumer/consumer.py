@@ -34,9 +34,8 @@ class AsyncKafkaConsumerService:
             payload = json.loads(msg.value.decode("utf-8"))
             event = Event.model_validate(payload)
 
-            # Замер latency
-            latency = (datetime.now(timezone.utc) - event.timestamp).total_seconds()
-            print(f"API→ClickHouse latency: {latency:.2f} sec")
+            # Устанавливаем время записи
+            event.store_time = datetime.now(timezone.utc)
 
             # Запись в ClickHouse (в thread pool)
             loop = asyncio.get_event_loop()

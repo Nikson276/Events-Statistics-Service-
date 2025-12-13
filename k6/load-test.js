@@ -16,16 +16,18 @@ export const options = {
 
 export default function () {
   let response
+  const event = {
+    id: `event-${__VU}-${__ITER}`,
+    user_id: "k6",
+    track_id: "Test-case-1-async",
+    ingest_time: new Date().toISOString(), // ← клиент устанавливает время
+    // store_time НЕ отправляется!
+  };
 
   // Post played track message
   response = http.post(
     'http://fastapi:8000/events/',  // ← ВАЖНО: внутри Docker — не 0.0.0.0!
-    JSON.stringify({
-      id: `event-${__VU}-${__ITER}`,
-      timestamp: new Date().toISOString(),
-      track_id: "test-iteration-001",
-      user_id: "k6-script"
-    }),
+    JSON.stringify(event),
     { headers: { 'Content-Type': 'application/json' } }
   )
   check(response, { 'status equals 200': r => r.status === 200 })
