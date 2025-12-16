@@ -18,7 +18,7 @@ async def create_event(event: Event, kafka = Depends(get_kafka_service)):
 async def list_events(
     limit: int = 10,
     offset: int = 0,
-    clickhouse_service: ClickHouseService = Depends(get_kafka_service),
+    clickhouse_service: ClickHouseService = Depends(),
 ):
     """Retrieve events from ClickHouse"""
     try:

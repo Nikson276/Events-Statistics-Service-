@@ -1,7 +1,7 @@
 ---
-title: "Нагрузочный тест лог №1"
+title: "Нагрузочный тест лог"
 status: draft
-version: 0.1
+version: 0.3
 author: "Михайлов Никита"
 date: 2025-12-09
 tags: [k6, 3500VU, fail]
@@ -32,6 +32,8 @@ tags: [k6, 3500VU, fail]
 | **ClickHouse** | `clickhouse/clickhouse-server:23` | Таблица `example.events` (MergeTree, партиционирование по месяцу) |
 | **Nginx** | `nginx:alpine` | Round-robin балансировка между 3 репликами FastAPI |
 | **Pyroscope** | `grafana/pyroscope:latest` | Профилирование CPU и memory всех компонентов |
+
+---
 
 ## ESS ревью после нагрузочного 3500 VU
 
@@ -102,7 +104,6 @@ default ✓ [======================================] 0000/3500 VUs  3m30s
 
 > 💡 **Вывод**: горизонтальное масштабирование **не решает проблему синхронного Kafka-драйвера**. Нужно исправлять **внутри одного инстанса**.
 
----
 
 ### **Переход на асинхронный Kafka-драйвер — ключевой шаг**
 
@@ -143,6 +144,8 @@ await loop.run_in_executor(None, self.producer.send, ...)
 2. Установи `aiokafka`,
 3. Реализуй `AsyncKafkaProducerService`,
 4. Перезапусти тест на **2500 VU**.
+
+---
 
 ## Список изменений после Ревью 1
 
@@ -255,11 +258,456 @@ default ✓ [======================================] 0000/3500 VUs  3m30s
 - **Настроить мониторинг lag'а**: алерт при росте consumer lag > 60 сек.
 - **Для роста RPS**: масштабировать **ClickHouse** (больше реплик, SSD, настройка MergeTree).
 
-## Список изменений для замера лага записи в Clickhouse
+---
 
-### ✅ Итоговые изменения
+## Реализация замера kafka лага при записи в Clickhouse
+
+### ✅ Список изменений для замера лага записи в Clickhouse
 
 - **ess/app/schemas/event.py** - Обновлена модель события новыми полями `ingest_time`, `store_time` для замера лага*
 - **k6/load-test.js** - Обновление скрипта по запонлению новой модели
 - **ess/scripts/init_all.py** - Добавление новых полей в создание таблицы в Clickhouse
 - **ess/kafka_consumer/consumer.py._process_message** - Заменил замер latency в stdout на запись в поле `store_time` значения.
+
+### Результаты замеров после реализации
+
+Kafla Lag metric
+
+```bash
+SELECT
+    count() AS total,
+    avg(dateDiff('second', ingest_time, store_time)) AS avg_e2e_sec,
+    quantiles(0.5, 0.9, 0.95, 0.99)(dateDiff('second', ingest_time, store_time)) AS p_latencies_sec
+FROM example.events
+WHERE store_time IS NOT NULL
+
+Query id: 5e5a4cd0-af51-4f4c-a6cb-ca24fc409ce4
+
+┌──total─┬────────avg_e2e_sec─┬─p_latencies_sec──────────────────────────┐
+│ 266606 │ 2005.4940061363961 │ [1991.5,3578.9000000000005,3779,3920.09] │
+└────────┴────────────────────┴──────────────────────────────────────────┘
+
+1 row in set. Elapsed: 0.011 sec. Processed 266.61 thousand rows, 4.27 MB (25.11 million rows/s., 401.71 MB/s.)
+Peak memory usage: 757.59 KiB.
+
+```
+
+### 📊 Анализ метрик
+
+| Метрика | Значение | Интерпретация |
+|--------|----------|---------------|
+| **Всего событий** | 266 606 | Соответствует ~1200 RPS × 222 сек ≈ 266k — данные полные |
+| **Средний e2e latency** | **~2005 сек = 33.4 минуты** | ⚠️ Критически высокий лаг |
+| **Медиана (p50)** | **1991 сек = 33.2 минуты** | Половина событий обработана за **более чем полчаса** |
+| **p95** | **3779 сек = 63 минуты** | 5% событий ждали **более часа** |
+| **p99** | **3920 сек = 65 минут** | Хвост задержек — **свыше часа** |
+
+> 💥 **Вывод**: consumer **не успевает обрабатывать события в реальном времени**.  
+> При пиковой нагрузке **очередь растёт**, и события задерживаются на **десятки минут**.
+
+---
+
+### 🔍 Почему так происходит?
+
+#### 1. Consumer — однопоточный
+
+Ты запускаешь **один consumer**, который:
+
+- Читает сообщения последовательно,
+- Вставляет их в ClickHouse **по одному** (или мелким батчам),
+- Блокируется на **каждую вставку**.
+
+При **1200 RPS**:
+
+- ClickHouse может обрабатывать **~100–200 вставок/сек** (в зависимости от конфигурации),
+- → Consumer **накапливает backlog** со скоростью **~1000 сообщений/сек**.
+
+#### 2. **ClickHouse не оптимизирован для highload-вставок**
+
+- По умолчанию ClickHouse **не любит частые мелкие вставки**,
+- Каждая вставка → вызов `INSERT` → overhead на парсинг, логирование, мерж.
+
+---
+
+### 💡 Архитектурный вывод
+
+Успешно **разделили ингест и обработку**:
+
+- **FastAPI + aiokafka** — справляются с **1200+ RPS**,
+- **Consumer → ClickHouse** — нужно **масштабировать и оптимизировать**.
+
+Это **классическая паттерн-архитектура**:
+> **"Принимай быстро, обрабатывай потом"** — и работает правильно.
+
+Теперь — очередь за **ускорением consumer pipeline**.
+
+---
+
+## Оптимизация consumer pipeline (`Test-case-10-async`)
+
+### 🥇 Шаг 1. **Батч-вставки** (самый высокий ROI)
+
+- Собирай 1000–10000 событий в памяти,
+- Вставляй **одним `INSERT`** в **одну локальную таблицу**.
+
+→ Уже даст **10–100× ускорение**.
+
+### 🥈 Шаг 2. **Масштабирование consumer'ов**
+
+- Запусти 4 consumer'а,
+- Пусть **каждый пишет в свой шард** (вручную: consumer-1 → node1, consumer-2 → node2...).
+
+→ Используем все 4 ноды **без сложности `Distributed`**.
+
+### 🥉 Шаг 3. **Только потом — `Distributed` + `Replicated`**
+
+- Когда будет **стабильный поток батчей**,
+- И **потребуется отказоустойчивость**.
+
+### ✅ Список изменений
+
+- **ess/kafka_consumer/consumer.py** - Добавил батчинг в методы и класс.
+- **docker-compose.yaml**:
+  - Разбил service: `Consumer` на 4 штуки, это кратно кол-ву партиций (36) и это позволит Kafka на основании консьюмер группы `group_id`="event-statistics-service" распределять партиции между ними равномерно (9 на консьюмер).
+- **ess/scripts/init_all.py**:
+  - Добавлено `Distributed table` для записи в Clickhouse.
+  - 2 шарда × 2 реплики = 4 ноды, с автоматической инициализацией
+- **ess/app/services/clickhouse.py**:
+  - Запись идёт в example.events (Distributed), ClickHouse сам распределяет данные по шардам и репликам
+  - Чтение из example.events — тоже собирает всё со всех шардов.
+
+**Общая конфигурация**
+
+```
+[Kafka: 36 партиций]
+       ↓
+[Consumer Group: 4 consumer'а] → автоматически делят партиции (9 на consumer)
+       ↓
+[ClickHouse: 4 ноды] → каждый consumer пишет в одну ноду в дистрибутивную таблицу, clickhouse сам распределяет по шардам и пишет реплики.
+```
+
+### Ожидания после изменений
+
+- Throughput consumer'ов вырастет в ~4 раза,
+- e2e latency упадёт с 33 минут до секунд,
+- Система станет truly parallel
+
+### Результаты и замеры
+
+```bash
+
+         /\      Grafana   /‾‾/  
+    /\  /  \     |\  __   /  /   
+   /  \/    \    | |/ /  /   ‾‾\ 
+  /          \   |   (  |  (‾)  |
+ / __________ \  |_|\_\  \_____/ 
+
+     execution: local
+        script: /scripts/load-test.js
+        output: -
+
+     scenarios: (100.00%) 1 scenario, 3500 max VUs, 4m0s max duration (incl. graceful stop):
+              * default: Up to 3500 looping VUs for 3m30s over 4 stages (gracefulRampDown: 30s, gracefulStop: 30s)
+
+WARN[0169] Could not get a VU from the buffer for 400ms  executor=ramping-vus scenario=default
+
+
+  █ THRESHOLDS 
+
+    http_reqs
+    ✓ 'count>=3500' count=300165
+
+
+  █ TOTAL RESULTS 
+
+    checks_total.......: 300165  1416.423648/s
+    checks_succeeded...: 100.00% 300165 out of 300165
+    checks_failed......: 0.00%   0 out of 300165
+
+    ✓ status equals 200
+
+    HTTP
+    http_req_duration..............: avg=1.31s min=3.17ms med=1.16s max=16.02s p(90)=2.33s p(95)=2.82s
+      { expected_response:true }...: avg=1.31s min=3.17ms med=1.16s max=16.02s p(90)=2.33s p(95)=2.82s
+    http_req_failed................: 0.00%  0 out of 300165
+    http_reqs......................: 300165 1416.423648/s
+
+    EXECUTION
+    iteration_duration.............: avg=1.34s min=3.61ms med=1.18s max=16.04s p(90)=2.38s p(95)=2.91s
+    iterations.....................: 300165 1416.423648/s
+    vus............................: 2123   min=0           max=3499
+    vus_max........................: 3500   min=3495        max=3500
+
+    NETWORK
+    data_received..................: 43 MB  204 kB/s
+    data_sent......................: 71 MB  336 kB/s
+
+
+
+
+running (3m31.9s), 0000/3500 VUs, 300165 complete and 0 interrupted iterations
+default ✓ [======================================] 0000/3500 VUs  3m30s
+```
+
+#### Но есть проблемы (консьюмеры упали, или что)
+
+В clickhouse попало всего 12,5к сообытий из 300к
+
+Почему разбираюсь.
+
+логи консьюмера:
+```bash
+consumer-1  | Group Coordinator Request failed: [Error 15] GroupCoordinatorNotAvailableError
+consumer-1  | Marking the coordinator dead (node 2)for group event-statistics-service.
+```
+А в сервисе kafka-0 при попытке посмотреть офсет выдало ошибку:
+```bash
+Error: Executing consumer group command failed due to org.apache.kafka.common.errors.TimeoutException: Timed out waiting for a node assignment. Call: describeGroups(api=FIND_COORDINATOR)
+java.util.concurrent.ExecutionException: org.apache.kafka.common.errors.TimeoutException: Timed out waiting for a node assignment. Call: describeGroups(api=FIND_COORDINATOR)
+        at java.base/java.util.concurrent.CompletableFuture.reportGet(Unknown Source)
+        at java.base/java.util.concurrent.CompletableFuture.get(Unknown Source)
+        at org.apache.kafka.common.internals.KafkaFutureImpl.get(KafkaFutureImpl.java:165)
+        at kafka.admin.ConsumerGroupCommand$ConsumerGroupService.$anonfun$describeConsumerGroups$1(ConsumerGroupCommand.scala:551)
+        at scala.collection.StrictOptimizedMapOps.map(StrictOptimizedMapOps.scala:28)
+        at scala.collection.StrictOptimizedMapOps.map$(StrictOptimizedMapOps.scala:27)
+        at scala.collection.convert.JavaCollectionWrappers$AbstractJMapWrapper.map(JavaCollectionWrappers.scala:344)
+        at kafka.admin.ConsumerGroupCommand$ConsumerGroupService.describeConsumerGroups(ConsumerGroupCommand.scala:550)
+        at kafka.admin.ConsumerGroupCommand$ConsumerGroupService.collectGroupsOffsets(ConsumerGroupCommand.scala:566)
+        at kafka.admin.ConsumerGroupCommand$ConsumerGroupService.describeGroups(ConsumerGroupCommand.scala:374)
+        at kafka.admin.ConsumerGroupCommand$.run(ConsumerGroupCommand.scala:72)
+        at kafka.admin.ConsumerGroupCommand$.main(ConsumerGroupCommand.scala:59)
+        at kafka.admin.ConsumerGroupCommand.main(ConsumerGroupCommand.scala)
+Caused by: org.apache.kafka.common.errors.TimeoutException: Timed out waiting for a node assignment. Call: describeGroups(api=FIND_COORDINATOR)
+```
+
+**В kafka ui**
+
+- вижу на топике - Total lag = 287406
+- при общем Message Count = 300166
+
+кажется нашлось потерянное. Явно что-то с консьюмерами мы намудрили.
+
+##### АНализ 
+
+> Ошибка GroupCoordinatorNotAvailableError и TimeoutException: Timed out waiting for a node assignment означают, что Kafka не может назначить координатора для consumer group, и это критическая проблема для твоего кластера.
+> Consumer group coordinator — это один из контроллеров, и если кластер не сформировал кворум — координатор недоступен.
+💡 GroupCoordinatorNotAvailableError = "Контроллер не избран или недоступен".
+
+**Возможные причины:**
+
+- Недостаточно времени на инициализацию кластера
+- При старте docker compose up Kafka-ноды не успели сформировать кворум до запуска consumer'ов.
+- Один из брокеров упал или не в сети
+- Неправильная конфигурация KAFKA_CONTROLLER_QUORUM_VOTERS
+
+У меня:
+```yaml
+KAFKA_CONTROLLER_QUORUM_VOTERS: "0@kafka-0:9093,1@kafka-1:9093,2@kafka-2:9093"
+```
+→ Это корректно, но если одна нода не стартовала — кворум не сформируется.
+
+**Как исправить?**
+
+- Обнови docker-compose.yml — добавь init-schemas как зависимость для consumer'ов, и удали consumer'ы из основного запуска
+
+#### Проверка исправлений
+
+```bash
+# Проверь, есть ли активный контроллер
+docker compose exec kafka-0 /opt/kafka/bin/kafka-metadata-quorum.sh --bootstrap-server localhost:9092 describe --status
+
+ClusterId:              Some(abcdefghijklmnopqrstuv)
+LeaderId:               1
+LeaderEpoch:            1
+HighWatermark:          910
+MaxFollowerLag:         0
+MaxFollowerLagTimeMs:   461
+CurrentVoters:          [0,1,2]
+CurrentObservers:       []
+```
+
+**Что это значит:**
+
+- LeaderId: 1 → нода kafka-1 — активный контроллер (это и есть "ActiveController").
+- CurrentVoters: [0,1,2] → все 3 ноды участвуют в кворуме.
+- MaxFollowerLag: 0 → все ноды синхронизированы.
+
+👉 Вывод: KRaft-кворум работает стабильно, контроллер избран.
+
+### Делаем новый замер `Test-case-11-async`
+
+Замеры k6
+
+```bash
+
+         /\      Grafana   /‾‾/  
+    /\  /  \     |\  __   /  /   
+   /  \/    \    | |/ /  /   ‾‾\ 
+  /          \   |   (  |  (‾)  |
+ / __________ \  |_|\_\  \_____/ 
+
+     execution: local
+        script: /scripts/load-test.js
+        output: -
+
+     scenarios: (100.00%) 1 scenario, 3500 max VUs, 4m0s max duration (incl. graceful stop):
+              * default: Up to 3500 looping VUs for 3m30s over 4 stages (gracefulRampDown: 30s, gracefulStop: 30s)
+
+
+
+  █ THRESHOLDS 
+
+    http_reqs
+    ✓ 'count>=3500' count=328780
+
+
+  █ TOTAL RESULTS 
+
+    checks_total.......: 328780  1549.150089/s
+    checks_succeeded...: 100.00% 328780 out of 328780
+    checks_failed......: 0.00%   0 out of 328780
+
+    ✓ status equals 200
+
+    HTTP
+    http_req_duration..............: avg=1.21s min=2.34ms med=1.08s max=26.34s p(90)=2.1s  p(95)=2.49s
+      { expected_response:true }...: avg=1.21s min=2.34ms med=1.08s max=26.34s p(90)=2.1s  p(95)=2.49s
+    http_req_failed................: 0.00%  0 out of 328780
+    http_reqs......................: 328780 1549.150089/s
+
+    EXECUTION
+    iteration_duration.............: avg=1.23s min=2.74ms med=1.1s  max=26.34s p(90)=2.13s p(95)=2.53s
+    iterations.....................: 328780 1549.150089/s
+    vus............................: 2046   min=15          max=3493
+    vus_max........................: 3500   min=3500        max=3500
+
+    NETWORK
+    data_received..................: 47 MB  223 kB/s
+    data_sent......................: 81 MB  379 kB/s
+
+
+
+
+running (3m32.2s), 0000/3500 VUs, 328780 complete and 0 interrupted iterations
+default ✓ [======================================] 0000/3500 VUs  3m30s
+```
+Проблемы%
+
+Запрос к Clickhouse
+```bash
+SELECT
+    count() AS total,
+    avg(dateDiff('second', ingest_time, store_time)) AS avg_e2e_sec,
+    quantiles(0.5, 0.9, 0.95, 0.99)(dateDiff('second', ingest_time, store_time)) AS p_latencies_sec
+FROM example.events
+WHERE store_time IS NOT NULL
+
+Query id: b2003cd8-3dee-4bb9-b7aa-20f559183b72
+
+┌─total─┬────────avg_e2e_sec─┬─p_latencies_sec─┐
+│  9632 │ 0.8911960132890365 │ [1,2,2,3]       │
+└───────┴────────────────────┴─────────────────┘
+
+1 row in set. Elapsed: 0.008 sec. Processed 9.63 thousand rows, 154.11 KB (1.19 million rows/s., 19.01 MB/s.)
+Peak memory usage: 525.16 KiB.
+```
+
+В kafka UI вижу что Message Count = 328780
+На consumer-group указано Total lag = 318940 
+Т.е. опять обработка зависла
+Но как проанализировать почему? 
+
+Запрос
+
+```bash
+ docker compose exec kafka-0 /opt/kafka/bin/kafka-metadata-quorum.sh --bootstrap-server localhost:9092 describe --status
+ClusterId:              Some(abcdefghijklmnopqrstuv)
+LeaderId:               0
+LeaderEpoch:            2
+HighWatermark:          16000
+MaxFollowerLag:         0
+MaxFollowerLagTimeMs:   0
+CurrentVoters:          [0,1,2]
+CurrentObservers:       []
+```
+
+```bash
+$ docker compose exec kafka-0 /opt/kafka/bin/kafka-consumer-groups.sh \
+  --bootstrap-server localhost:9092 \
+  --group event-statistics-service \
+  --describe
+
+Consumer group 'event-statistics-service' has no active members.
+```
+
+еще проверил логи консьюмеров
+
+```bash
+$ docker compose logs consumer-1
+consumer-1  | Heartbeat failed for group event-statistics-service because it is rebalancing
+```
+
+И судя по docker compose stats все 4 консьюмера запущены
+
+что не так? 
+
+> Причина: бесконечный ребалансинг consumer group
+> Kafka **начинает ребалансинг**, когда:
+
+1. Consumer **присоединяется или покидает группу**,
+2. Consumer **не отправляет heartbeat вовремя**,
+3. Consumer **не завершает обработку партиции за `max.poll.interval.ms`**
+
+Мой пункт вероятно 3: Consumer не успевает обработать батч за отведённое время → Kafka считает его мёртвым → начинает ребаланс → consumer переподключается → цикл повторяется.
+
+**Подтверждение из логов**
+
+- **`Heartbeat failed ... rebalancing`** → consumer не отправил heartbeat,
+- **`No active members`** → все consumer'ы в состоянии ребаланса,
+- **`Total lag = 318 940`** → consumer'ы **не обрабатывают сообщения**,
+- **ClickHouse: только 9632 строк** → consumer'ы **начали обработку, но зависли**.
+
+👉 Это **классический симптом слишком долгой обработки сообщения**.
+
+#### 🔧 Решение: настроить `session.timeout.ms` и `max.poll.interval.ms`
+
+В `aiokafka` эти параметры задаются при создании consumer'а.
+
+Обновить `AsyncKafkaConsumerService`:
+
+```python
+# ess/kafka_consumer/consumer.py
+self.consumer = AIOKafkaConsumer(
+    settings.kafka_topic,
+    bootstrap_servers=settings.kafka_bootstrap_servers,
+    group_id="event-statistics-service",
+    auto_offset_reset="earliest",
+    enable_auto_commit=False,
+    # Ключевые настройки:
+    session_timeout_ms=45000,        # время на heartbeat (дефолт 45s)
+    heartbeat_interval_ms=15000,     # отправка heartbeat каждые 15s
+    max_poll_interval_ms=300000,     # время на обработку батча — 5 минут!
+)
+```
+💡 max_poll_interval_ms=300000 (5 минут) — даёт consumer'у достаточно времени на обработку большого батча.
+
+НЕ ПОМОГЛО `:(`
+
+**НОВЫЙ ПЛАН**
+полностью уберём батчинг из consumer'а и перепишем запись в ClickHouse через массивную вставку (executemany) — это стабильно, быстро и совместимо с Kafka heartbeat'ами.
+
+> Кажется сработало. 
+> Итого: эксперименты с батчингом на стороне консьюмера были не удачные. Логи выше.
+> Сейчас жду обработку всего лага, и проверю финиш.
+
+P.S. - Работа консьюмеров очень медленная. За 5 мин 20к сообщений, из 300к `:(`
+
+ТАк что надо убирать синхронную библиотеку и у clickhouse на  асинхронный драйвер для ClickHouse
+```bash
+#Установить асинхронный драйвер
+pip install aiochclient или pip install clickhouse-driver[asynch]
+```
+
+
+### Замер лага в итоге
+

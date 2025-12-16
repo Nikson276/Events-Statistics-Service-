@@ -18,8 +18,8 @@ export default function () {
   let response
   const event = {
     id: `event-${__VU}-${__ITER}`,
-    user_id: "k6",
-    track_id: "Test-case-1-async",
+    user_id: `user-${__VU}`,
+    track_id: "Test-case-11-async",
     ingest_time: new Date().toISOString(), // ← клиент устанавливает время
     // store_time НЕ отправляется!
   };

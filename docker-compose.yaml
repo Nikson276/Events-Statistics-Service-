@@ -1,8 +1,15 @@
-
 x-clickhouse-config: &clickhouse-config
   image: clickhouse/clickhouse-server:23
   networks:
     - ess-net
+
+x-consumer-template: &consumer-template
+  build: .
+  profiles: ["consumers"]  # Для ручного запуска
+  networks:
+    - ess-net
+  command: ["python", "-m", "ess.kafka_consumer.main"]
+  restart: on-failure
 
 services:
   # =============== ZOOKEEPER (для ClickHouse) ===============
@@ -186,22 +193,43 @@ services:
     command: ["uvicorn", "ess.app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "8"]
 
 
-  # =============== KAFKA CONSUMER ===============
-  kafka-consumer:
-    build: .
-    container_name: kafka-consumer
+  # =============== KAFKA CONSUMERs ===============
+  consumer-1:
+    <<: *consumer-template
+    container_name: consumer-1
     environment:
       - KAFKA_BOOTSTRAP_SERVERS=kafka-0:9092
       - KAFKA_TOPIC=nikson-test
       - CLICKHOUSE_HOST=clickhouse-node1
       - CLICKHOUSE_PORT=9000
-    networks:
-      - ess-net
-    depends_on:
-      init-schemas:
-        condition: service_completed_successfully
-    command: ["python", "-m", "ess.kafka_consumer.main"]
-    restart: on-failure
+
+  consumer-2:
+    <<: *consumer-template
+    container_name: consumer-2
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka-0:9092
+      - KAFKA_TOPIC=nikson-test
+      - CLICKHOUSE_HOST=clickhouse-node1
+      - CLICKHOUSE_PORT=9000
+
+  consumer-3:
+    <<: *consumer-template
+    container_name: consumer-3
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka-0:9092
+      - KAFKA_TOPIC=nikson-test
+      - CLICKHOUSE_HOST=clickhouse-node1
+      - CLICKHOUSE_PORT=9000
+
+  consumer-4:
+    <<: *consumer-template
+    container_name: consumer-4
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka-0:9092
+      - KAFKA_TOPIC=nikson-test
+      - CLICKHOUSE_HOST=clickhouse-node1
+      - CLICKHOUSE_PORT=9000
+
 
   # =============== Grafana Pyroscope ===============
   pyroscope:
