@@ -85,11 +85,12 @@ def create_clickhouse_schema():
                 track_id String,
                 ingest_time DateTime64(3, 'UTC'),
                 store_time DateTime64(3, 'UTC')
-            ) ENGINE = ReplicatedMergeTree(
+            ) ENGINE = ReplicatedReplacingMergeTree(
                 '/clickhouse/company_cluster/tables/{shard}/events_local',
-                '{replica}'
+                '{replica}',
+                store_time
             )
-            ORDER BY (ingest_time, id)
+            ORDER BY (id, ingest_time)
         """)
 
         # 2. Распределённая таблица (на каждой ноде)
