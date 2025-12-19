@@ -41,9 +41,7 @@ watch -n 30 "docker compose exec clickhouse-node1 clickhouse-client --query 'SEL
 Внутри контейнера
 
 ```bash
-docker compose exec -it clickhouse-node1 bash
-
-clickhouse-client
+docker compose exec -it clickhouse-node1 clickhouse-client
 
 SHOW TABLES IN example;
 
@@ -60,27 +58,72 @@ FROM example.events
 WHERE store_time IS NOT NULL;
 ```
 
+Проверка дубликатов
+
+```bash
+SELECT
+    id,
+    count()
+FROM example.events
+GROUP BY id
+HAVING count() > 1
+ORDER BY count() DESC
+LIMIT 100
+
+SELECT sum(cnt) as total_duplicate_rows
+FROM (
+    SELECT count() as cnt
+    FROM example.events
+    GROUP BY id
+    HAVING cnt > 1
+)
+```
+
+
 ## Работа с Kafka
 
-Зайти в контейнер
+**Зайти в контейнер**
 
 ```bash
 docker compose exec kafka-0
 ```
 
-Проверить, состояние и показатели на консьюмер группе
+**Команда для проверки активных консьюмеров**
 
 ```bash
-docker compose exec kafka-0 /opt/kafka/bin/kafka-consumer-groups.sh   --bootstrap-server localhost:9092   --group event-statistics-service   --describe
+docker compose exec kafka-0 \
+  /opt/kafka/bin/kafka-consumer-groups.sh \
+  --bootstrap-server localhost:9092 \
+  --group event-statistics-service \
+  --describe
 ```
 
-Следить за лагом 
+**Что искать:**
+
+- В колонке **`CONSUMER-ID`** — должны быть **4 уникальных ID** (по одному на consumer),
+- В колонке **`HOST`** — должны быть IP твоих consumer-контейнеров (например, `/172.18.0.13`),
+- **`LAG`** может быть `0` или `-` (если ещё нет данных) — это нормально **до запуска k6**.
+
+> ⚠️ Если вывод:  
+> `Consumer group 'event-statistics-service' has no active members.`  
+> → **Consumer'ы не подключены** — не запускай k6!
+
+**Проверка, что нет ошибок подключений**
+
+```bash
+docker compose logs consumer-1 | tail -5
+```
+
+- ✅ Kafka consumer started — хорошо,
+- Heartbeat failed или GroupCoordinatorNotAvailable — плохо, нужно перезапустить.
+
+**Следить за лагом**
 
 ```bash
 watch -n 30 "docker compose exec kafka-0 /opt/kafka/bin/kafka-consumer-groups.sh --bootstrap-server localhost:9092 --group event-statistics-service --describe | tail -n +2 | awk '{sum += \$5} END {print \"Processed:\", sum}'"
 ```
 
-Проверь, есть ли активный контроллер для группы консьюмеров
+**Проверь, есть ли активный контроллер для группы консьюмеров**
 
 ```bash
 docker compose exec kafka-0 /opt/kafka/bin/kafka-metadata-quorum.sh --bootstrap-server localhost:9092 describe --status
