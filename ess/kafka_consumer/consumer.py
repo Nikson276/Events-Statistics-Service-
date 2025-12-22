@@ -1,71 +1,80 @@
-import asyncio
-import json
-from kafka import KafkaConsumer
-from ess.app.schemas.event import Event
-from ess.app.config import settings
-from ess.app.services.clickhouse import ClickHouseService
+# # ess/kafka_consumer/consumer.py
+# import asyncio
+# import json
+# from typing import List
+# from datetime import datetime, timezone
+# from aiokafka import AIOKafkaConsumer
+# from ess.app.schemas.event import Event
+# from ess.app.config import settings
+# from ess.app.services.clickhouse import ClickHouseService
 
 
-class KafkaConsumerService:
-    """Service for consuming events from Kafka topic and saving to ClickHouse."""
+# class AsyncKafkaConsumerService:
+#     def __init__(self):
+#         self.consumer = AIOKafkaConsumer(
+#             settings.kafka_topic,
+#             bootstrap_servers=settings.kafka_bootstrap_servers,
+#             group_id="event-statistics-service",
+#             auto_offset_reset="earliest",
+#             enable_auto_commit=False,
+#             # Критически важные таймауты:
+#             session_timeout_ms=45000,
+#             heartbeat_interval_ms=15000,
+#             max_poll_interval_ms=300000,  # 5 минут — с запасом
+#         )
+#         self.clickhouse = ClickHouseService()
+#         # self.batch: List[Event] = []
+#         # self.batch_size = 1000  # ← размер батча
+#         # self.batch_timeout = 5.0  # ← максимальное время ожидания (сек)
+#         # self.batch_lock = asyncio.Lock()
+#         # self._batch_timer = None
 
-    def __init__(self):
-        self.bootstrap_servers = settings.kafka_bootstrap_servers
-        self.topic = settings.kafka_topic
-        # Используем kafka-python
-        self.consumer = KafkaConsumer(
-            self.topic,
-            bootstrap_servers=self.bootstrap_servers,
-            auto_offset_reset='earliest',
-            group_id='event-statistics-service',
-            enable_auto_commit=False,  # ⚠️ коммитим сами!
-            value_deserializer=lambda x: x.decode('utf-8'),  # декодируем байты → строка
-        )
-        self.clickhouse = ClickHouseService()
-        self.running = True
+#     async def start_consuming(self):
+#         await self.consumer.start()
+#         print("✅ Kafka consumer started (no batching)")
 
-    async def start_consuming(self) -> None:
-        """Start consuming messages from Kafka and store them in ClickHouse."""
-        print(f"✅ Kafka consumer started. Listening to topic: {self.topic}")
+#         try:
+#             async for msg in self.consumer:
+#                 await self._process_message(msg)
+#         finally:
+#             await self.consumer.stop()
 
-        try:
-            # kafka-python consumer — итерируемый объект
-            for message in self.consumer:
-                if not self.running:
-                    break
-                await self._process_message(message)
+#     async def _process_message(self, msg):
+#         try:
+#             payload = json.loads(msg.value.decode("utf-8"))
+#             event = Event.model_validate(payload)
+#             event.store_time = datetime.now(timezone.utc)
 
-        except Exception as e:
-            print(f"💥 Kafka consumer error: {e}")
-            raise
-        finally:
-            self.consumer.close()
+#             # Пишем СРАЗУ — без батчинга
+#             loop = asyncio.get_event_loop()
+#             await loop.run_in_executor(None, self.clickhouse.insert_events, event)
 
-    def stop(self) -> None:
-        """Gracefully stop the consumer."""
-        print("🛑 Stopping Kafka consumer...")
-        self.running = False
+#             # Коммитим офсет
+#             await self.consumer.commit()
+#             print(f"✅ Processed event: {event.id}")
 
-    async def _process_message(self, message) -> None:
-        """Deserialize and store a single message."""
-        try:
-            # message.value — уже строка (благодаря value_deserializer)
-            payload = json.loads(message.value)
-            event = Event.model_validate(payload)
+#         except Exception as e:
+#             print(f"❌ Failed to process message: {e}")
+#             await self.consumer.commit() # для dev — коммитим, В продакшене: отправка в DLQ
 
-            # Запись в ClickHouse (в thread pool)
-            loop = asyncio.get_event_loop()
-            await loop.run_in_executor(None, self.clickhouse.insert_events, event)
+#     async def _flush_batch(self):
+#         async with self.batch_lock:
+#             if not self.batch:
+#                 return
+#             batch_to_flush = self.batch.copy()
+#             self.batch.clear()
+#             if self._batch_timer:
+#                 self._batch_timer.cancel()
+#                 self._batch_timer = None
 
-            # ✅ Подтверждаем обработку
-            self.consumer.commit()
-            print(f"✅ Processed event: {event.id}")
-
-        except json.JSONDecodeError as e:
-            print(f"❌ Invalid JSON: {e}")
-            self.consumer.commit()  # или не коммитить — зависит от стратегии
-
-        except Exception as e:
-            print(f"❌ Failed to process message: {e}")
-            # Для dev — коммитим, чтобы не висеть
-            self.consumer.commit()
+#         try:
+#             # Вставка в ClickHouse (в thread pool)
+#             loop = asyncio.get_event_loop()
+#             await loop.run_in_executor(None, self.clickhouse.insert_events, batch_to_flush)
+#             await self.consumer.commit()  # коммитим офсеты после успешной вставки
+#             print(f"✅ Flushed batch of {len(batch_to_flush)} events")
+#         except Exception as e:
+#             print(f"❌ Failed to flush batch: {e}")
+#             # В продакшене: отправка в DLQ, повторная попытка
+#             # Для dev — коммитим, чтобы не застревать
+#             await self.consumer.commit()

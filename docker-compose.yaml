@@ -1,8 +1,15 @@
-
 x-clickhouse-config: &clickhouse-config
   image: clickhouse/clickhouse-server:23
   networks:
     - ess-net
+
+x-consumer-template: &consumer-template
+  build: .
+  profiles: ["consumers"]  # Для ручного запуска
+  networks:
+    - ess-net
+  command: ["python", "-m", "ess.kafka_consumer.main"]
+  restart: on-failure
 
 services:
   # =============== ZOOKEEPER (для ClickHouse) ===============
@@ -79,6 +86,11 @@ services:
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT,PLAINTEXT:PLAINTEXT"
       KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
       KAFKA_LOG_DIRS: "/var/lib/kafka/data"
+      KAFKA_CFG_NUM_NETWORK_THREADS: 8
+      KAFKA_CFG_NUM_IO_THREADS: 16
+      KAFKA_CFG_SOCKET_SEND_BUFFER_BYTES: 2097152
+      KAFKA_CFG_SOCKET_RECEIVE_BUFFER_BYTES: 2097152
+      KAFKA_CFG_NUM_REPLICA_FETCHERS: 4
     volumes:
       - kafka_0_data:/var/lib/kafka/data
     networks:
@@ -100,6 +112,11 @@ services:
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT,PLAINTEXT:PLAINTEXT"
       KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
       KAFKA_LOG_DIRS: "/var/lib/kafka/data"
+      KAFKA_CFG_NUM_NETWORK_THREADS: 8
+      KAFKA_CFG_NUM_IO_THREADS: 16
+      KAFKA_CFG_SOCKET_SEND_BUFFER_BYTES: 2097152
+      KAFKA_CFG_SOCKET_RECEIVE_BUFFER_BYTES: 2097152
+      KAFKA_CFG_NUM_REPLICA_FETCHERS: 4
     volumes:
       - kafka_1_data:/var/lib/kafka/data
     networks:
@@ -121,6 +138,11 @@ services:
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT,PLAINTEXT:PLAINTEXT"
       KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
       KAFKA_LOG_DIRS: "/var/lib/kafka/data"
+      KAFKA_CFG_NUM_NETWORK_THREADS: 8
+      KAFKA_CFG_NUM_IO_THREADS: 16
+      KAFKA_CFG_SOCKET_SEND_BUFFER_BYTES: 2097152
+      KAFKA_CFG_SOCKET_RECEIVE_BUFFER_BYTES: 2097152
+      KAFKA_CFG_NUM_REPLICA_FETCHERS: 4
     volumes:
       - kafka_2_data:/var/lib/kafka/data
     networks:
@@ -150,11 +172,6 @@ services:
       - KAFKA_BOOTSTRAP_SERVERS=kafka-0:9092
       - CLICKHOUSE_HOST=clickhouse-node1
       - CLICKHOUSE_PORT=9000
-    # depends_on:
-    #   kafka-0:
-    #     condition: service_healthy
-    #   clickhouse-node1:
-    #     condition: service_healthy
     command: ["python", "-m", "ess.scripts.init_all"]
 
   # =============== FASTAPI ===============
@@ -175,28 +192,76 @@ services:
         condition: service_completed_successfully
     command: ["uvicorn", "ess.app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "8"]
 
-  # =============== KAFKA CONSUMER ===============
-  kafka-consumer:
-    build: .
-    container_name: kafka-consumer
+
+  # =============== KAFKA CONSUMERs ===============
+  consumer-1:
+    <<: *consumer-template
+    container_name: consumer-1
     environment:
       - KAFKA_BOOTSTRAP_SERVERS=kafka-0:9092
       - KAFKA_TOPIC=nikson-test
       - CLICKHOUSE_HOST=clickhouse-node1
       - CLICKHOUSE_PORT=9000
+
+  consumer-2:
+    <<: *consumer-template
+    container_name: consumer-2
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka-0:9092
+      - KAFKA_TOPIC=nikson-test
+      - CLICKHOUSE_HOST=clickhouse-node1
+      - CLICKHOUSE_PORT=9000
+
+  consumer-3:
+    <<: *consumer-template
+    container_name: consumer-3
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka-0:9092
+      - KAFKA_TOPIC=nikson-test
+      - CLICKHOUSE_HOST=clickhouse-node1
+      - CLICKHOUSE_PORT=9000
+
+  consumer-4:
+    <<: *consumer-template
+    container_name: consumer-4
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka-0:9092
+      - KAFKA_TOPIC=nikson-test
+      - CLICKHOUSE_HOST=clickhouse-node1
+      - CLICKHOUSE_PORT=9000
+
+
+  # =============== Grafana Pyroscope ===============
+  pyroscope:
+    image: grafana/pyroscope:latest
+    container_name: pyroscope
+    ports:
+      - "4040:4040"  # Веб-интерфейс
+      - "4041:4041"  # gRPC API (для агентов)
+    command:
+      - "server"
     networks:
       - ess-net
-    depends_on:
-      init-schemas:
-        condition: service_completed_successfully
-    command: ["python", "-m", "ess.kafka_consumer.main"]
-    restart: on-failure
+    volumes:
+      - pyroscope_:/data  # сохранение данных между перезапусками
+
+  # =============== Grafana K6 ===============
+  k6:
+    image: grafana/k6:latest
+    container_name: k6
+    volumes:
+      - ./k6:/scripts  # монтируем папку со скриптами
+    networks:
+      - ess-net
+    command: ["run", "/scripts/load-test.js"]
+    profiles: ["load-test"]
 
 # =============== VOLUMES ===============
 volumes:
   kafka_0_data:
   kafka_1_data:
   kafka_2_data:
+  pyroscope_:
 
 # =============== NETWORK ===============
 networks:

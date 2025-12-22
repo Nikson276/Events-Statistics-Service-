@@ -1,18 +1,35 @@
 import uvicorn
+import pyroscope
+import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
-from .services.kafka_producer import kafka_producer_lifespan
+from .services.kafka import init_kafka, close_kafka
 from .routers import events
 from .config import settings
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Инициализация Pyroscope (до FastAPI)
+try:
+    pyroscope.configure(
+        application_name="ess.fastapi",
+        server_address="http://pyroscope:4040",
+        tags={"host": "fastapi"},
+    )
+    logger.info("✅ Pyroscope agent initialized")
+except Exception as e:
+    logger.error(f"❌ Pyroscope init failed: {e}")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
-    await kafka_producer_lifespan["startup"]()
+    await init_kafka()
+    print("✅ Kafka producer started")
     yield
     # Shutdown
-    await kafka_producer_lifespan["shutdown"]()
+    await close_kafka()
+
 
 app = FastAPI(
     title="ESS Service",

@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     clickhouse_port: int = 9000
     clickhouse_database: str = "example"
     clickhouse_table: str = "events"
+    grafana_pyroscope: str = "configured"
 
     class Config:
         env_file = ".env", ".env.local"

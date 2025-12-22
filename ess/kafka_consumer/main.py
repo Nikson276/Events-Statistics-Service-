@@ -1,13 +1,16 @@
-# main_consumer.py
+# ess/kafka_consumer/main.py
 import asyncio
-from .consumer import KafkaConsumerService
+from .async_consumer import AsyncKafkaConsumerService, AsyncClickHouseBatchWriter
 
 async def main():
-    consumer = KafkaConsumerService()
+    writer = AsyncClickHouseBatchWriter(batch_size=5000, flush_timeout=5.0)
+    await writer.start()
+    
+    consumer = AsyncKafkaConsumerService(writer)
     try:
         await consumer.start_consuming()
-    except KeyboardInterrupt:
-        consumer.stop()
+    finally:
+        await writer.stop()
 
 if __name__ == "__main__":
     asyncio.run(main())
