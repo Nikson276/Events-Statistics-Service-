@@ -20,7 +20,7 @@ def wait_for_clickhouse(host: str):
     print("⏳ Waiting for ClickHouse...")
     while True:
         try:
-            client = Client(host=host, port=8123)
+            client = Client(host=host, port=9000)
             client.execute("SELECT 1")
             break
         except Exception as e:
@@ -71,7 +71,7 @@ def create_clickhouse_schema():
     nodes = ["clickhouse-node1", "clickhouse-node2", "clickhouse-node3", "clickhouse-node4"]
     for host in nodes:
         wait_for_clickhouse(host)
-        client = Client(host=host, port=8123)
+        client = Client(host=host, port=9000)
 
         print(f"Creating DB & Tables on node {host}")
         # 1. Локальная реплицируемая таблица

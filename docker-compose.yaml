@@ -26,8 +26,8 @@ services:
     container_name: clickhouse-node1
     hostname: clickhouse-node1
     ports:
-      - "8123:8123"
-      - "9000:9000"
+      - "9000:9000"  # ← должен быть открыт для clickhouse-driver
+      - "8123:8123"  # ← для aiochclient
     volumes:
       - ./clickhouse-config/node1:/etc/clickhouse-server
     depends_on:
@@ -184,7 +184,7 @@ services:
       - KAFKA_BOOTSTRAP_SERVERS=kafka-0:9092
       - KAFKA_TOPIC=nikson-test
       - CLICKHOUSE_HOST=clickhouse-node1
-      - CLICKHOUSE_PORT=9000
+      - CLICKHOUSE_PORT=8123
     networks:
       - ess-net
     depends_on:
