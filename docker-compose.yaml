@@ -201,7 +201,7 @@ services:
       - KAFKA_BOOTSTRAP_SERVERS=kafka-0:9092
       - KAFKA_TOPIC=nikson-test
       - CLICKHOUSE_HOST=clickhouse-node1
-      - CLICKHOUSE_PORT=9000
+      - CLICKHOUSE_PORT=8123
 
   consumer-2:
     <<: *consumer-template
@@ -210,7 +210,7 @@ services:
       - KAFKA_BOOTSTRAP_SERVERS=kafka-0:9092
       - KAFKA_TOPIC=nikson-test
       - CLICKHOUSE_HOST=clickhouse-node1
-      - CLICKHOUSE_PORT=9000
+      - CLICKHOUSE_PORT=8123
 
   consumer-3:
     <<: *consumer-template
@@ -219,7 +219,7 @@ services:
       - KAFKA_BOOTSTRAP_SERVERS=kafka-0:9092
       - KAFKA_TOPIC=nikson-test
       - CLICKHOUSE_HOST=clickhouse-node1
-      - CLICKHOUSE_PORT=9000
+      - CLICKHOUSE_PORT=8123
 
   consumer-4:
     <<: *consumer-template
@@ -228,7 +228,7 @@ services:
       - KAFKA_BOOTSTRAP_SERVERS=kafka-0:9092
       - KAFKA_TOPIC=nikson-test
       - CLICKHOUSE_HOST=clickhouse-node1
-      - CLICKHOUSE_PORT=9000
+      - CLICKHOUSE_PORT=8123
 
 
   # =============== Grafana Pyroscope ===============

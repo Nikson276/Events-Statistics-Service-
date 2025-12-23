@@ -5,7 +5,7 @@ class Settings(BaseSettings):
     kafka_bootstrap_servers: str = "localhost:9092"
     kafka_topic: str = "nikson-test"
     clickhouse_host: str = "localhost"
-    clickhouse_port: int = 9000
+    clickhouse_port: int = 8123
     clickhouse_database: str = "example"
     clickhouse_table: str = "events"
     grafana_pyroscope: str = "configured"
