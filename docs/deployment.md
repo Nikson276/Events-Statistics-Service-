@@ -80,6 +80,8 @@ FROM (
 ```
 
 ```bash
+
+
 SELECT
   min(ingest_time) AS first_event_sent,
   min(store_time) AS first_event_processed
