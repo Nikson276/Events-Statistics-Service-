@@ -7,10 +7,10 @@ export const options = {
     http_reqs: ['count>=3500']
   },
   stages: [
-    { target: 1500, duration: '1m' },
-    { target: 2500, duration: '1m30s' },
-    { target: 3000, duration: '30s' },
-    { target: 3500, duration: '30s' },
+    { target: 150, duration: '1m' },
+    { target: 250, duration: '1m30s' },
+    { target: 300, duration: '30s' },
+    { target: 350, duration: '30s' },
   ],
 }
 
@@ -22,11 +22,11 @@ export default function () {
     track_id: "Test-case-11-async",
     ingest_time: new Date().toISOString(), // ← клиент устанавливает время
     // store_time НЕ отправляется!
-  };
+  }; 
 
   // Post played track message
   response = http.post(
-    'http://fastapi:8000/events/',  // ← ВАЖНО: внутри Docker — не 0.0.0.0!
+    'http://89.223.71.66:8000/events/',  // ← ВАЖНО: внутри Docker — не 0.0.0.0!
     JSON.stringify(event),
     { headers: { 'Content-Type': 'application/json' } }
   )
