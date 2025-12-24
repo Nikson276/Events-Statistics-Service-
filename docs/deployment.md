@@ -79,6 +79,15 @@ FROM (
 )
 ```
 
+```bash
+SELECT
+  min(ingest_time) AS first_event_sent,
+  min(store_time) AS first_event_processed
+FROM example.events;
+
+SELECT count(), count(DISTINCT id) FROM example.events;
+```
+
 
 ## Работа с Kafka
 

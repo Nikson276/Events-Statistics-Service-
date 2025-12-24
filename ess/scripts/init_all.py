@@ -71,7 +71,7 @@ def create_clickhouse_schema():
     nodes = ["clickhouse-node1", "clickhouse-node2", "clickhouse-node3", "clickhouse-node4"]
     for host in nodes:
         wait_for_clickhouse(host)
-        client = Client(host=host, port=9000)
+        client = Client(host=host, port=9000 )
 
         print(f"Creating DB & Tables on node {host}")
         # 1. Локальная реплицируемая таблица
@@ -90,7 +90,7 @@ def create_clickhouse_schema():
                 '{replica}',
                 store_time
             )
-            ORDER BY (id, ingest_time)
+            ORDER BY (id, store_time)
         """)
 
         # 2. Распределённая таблица (на каждой ноде)

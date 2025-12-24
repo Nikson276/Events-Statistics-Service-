@@ -925,3 +925,210 @@ docker stats clickhouse-node1 clickhouse-node2 clickhouse-node3 clickhouse-node4
 
 - **VM-1** — основной workload (Kafka + ClickHouse — очень требовательны к CPU и диску),
 - **VM-2** — только генерация нагрузки, не мешает основной системе.
+
+
+### Тест и замеры
+
+Провел тестовый замер в облаке 
+посмотри результаты лага и времени записи
+
+```bash
+SELECT
+    count() AS total,
+    avg(dateDiff('second', ingest_time, store_time)) AS avg_e2e_sec,
+    quantiles(0.5, 0.9, 0.95, 0.99)(dateDiff('second', ingest_time, store_time)) AS p_latencies_sec
+FROM example.events
+WHERE store_time IS NOT NULL
+
+Query id: 217467a9-b372-4392-a7c8-c2b80a735533
+
+┌───total─┬───────avg_e2e_sec─┬─p_latencies_sec──────────────────────────────────────────────┐
+│ 3110400 │ 606.0533516589506 │ [602,922.9000000000005,979.4499999999998,1030.0900000000001] │
+└─────────┴───────────────────┴──────────────────────────────────────────────────────────────┘
+
+1 row in set. Elapsed: 0.134 sec. Processed 3.11 million rows, 49.77 MB (23.27 million rows/s., 372.39 MB/s.)
+Peak memory usage: 8.72 MiB.
+```
+
+Но так же вижу что дубликатов оч много 
+
+```bash
+SELECT sum(cnt) AS total_duplicate_rows
+FROM
+(
+    SELECT count() AS cnt
+    FROM example.events
+    GROUP BY id
+    HAVING cnt > 1
+)
+
+Query id: 4d64a561-c4c7-4c7a-bee8-dfe0d550d08d
+
+┌─total_duplicate_rows─┐
+│               633890 │
+└──────────────────────┘
+
+1 row in set. Elapsed: 2.842 sec. Processed 3.11 million rows, 68.98 MB (1.09 million rows/s., 24.27 MB/s.)
+Peak memory usage: 359.46 MiB.
+``` 
+
+```bash
+SELECT
+    count(),
+    countDistinct(id)
+FROM example.events
+
+Query id: 2cba3b78-4b84-490b-8143-7217ac353a67
+
+┌─count()─┬─uniqExact(id)─┐
+│ 3110400 │       2793455 │
+└─────────┴───────────────┘
+
+1 row in set. Elapsed: 8.798 sec. Processed 3.11 million rows, 68.98 MB (353.52 thousand rows/s., 7.84 MB/s.)
+Peak memory usage: 509.72 MiB.
+```
+
+> РЕШЕНИЕ по дубликатам:
+> в скрипт создания таблицы добавил ORDER BY (id, store_time);  -- ← обязательно включить store_time в ORDER BY
+> До этого был ingest_time и сортировка работала не верно.
+
+
+### Новый тест и замеры 
+
+**k6 результат**
+
+```
+
+         /\      Grafana   /‾‾/  
+    /\  /  \     |\  __   /  /   
+   /  \/    \    | |/ /  /   ‾‾\ 
+  /          \   |   (  |  (‾)  |
+ / __________ \  |_|\_\  \_____/ 
+
+     execution: local
+        script: /scripts/load-test.js
+        output: -
+
+     scenarios: (100.00%) 1 scenario, 3500 max VUs, 4m0s max duration (incl. graceful stop):
+              * default: Up to 3500 looping VUs for 3m30s over 4 stages (gracefulRampDown: 30s, gracefulStop: 30s)
+
+
+
+  █ THRESHOLDS 
+
+    http_reqs
+    ✓ 'count>=3500' count=1952643
+
+
+  █ TOTAL RESULTS 
+
+    checks_total.......: 1952643 9282.361382/s
+    checks_succeeded...: 100.00% 1952643 out of 1952643
+    checks_failed......: 0.00%   0 out of 1952643
+
+    ✓ status equals 200
+
+    HTTP
+    http_req_duration..............: avg=206.81ms min=1.54ms med=195.78ms max=1.01s p(90)=366.77ms p(95)=418.58ms
+      { expected_response:true }...: avg=206.81ms min=1.54ms med=195.78ms max=1.01s p(90)=366.77ms p(95)=418.58ms
+    http_req_failed................: 0.00%   0 out of 1952643
+    http_reqs......................: 1952643 9282.361382/s
+
+    EXECUTION
+    iteration_duration.............: avg=207.6ms  min=1.65ms med=196.4ms  max=1.67s p(90)=368.55ms p(95)=421.16ms
+    iterations.....................: 1952643 9282.361382/s
+    vus............................: 3494    min=18           max=3494
+    vus_max........................: 3500    min=3500         max=3500
+
+    NETWORK
+    data_received..................: 281 MB  1.3 MB/s
+    data_sent......................: 489 MB  2.3 MB/s
+
+
+
+
+running (3m30.4s), 0000/3500 VUs, 1952643 complete and 0 interrupted iterations
+default ✓ [======================================] 0000/3500 VUs  3m30s
+```
+
+
+**Проверка clickhouse**
+
+```bash
+SELECT
+    count() AS total,
+    avg(dateDiff('second', ingest_time, store_time)) AS avg_e2e_sec,
+    quantiles(0.5, 0.9, 0.95, 0.99)(dateDiff('second', ingest_time, store_time)) AS p_latencies_sec
+FROM example.events
+WHERE store_time IS NOT NULL
+
+Query id: 422f8251-7c55-44ba-b47f-4bfceb9b2469
+
+┌───total─┬───────avg_e2e_sec─┬─p_latencies_sec───┐
+│ 1952643 │ 475.4713155451355 │ [476,765,821,852] │
+└─────────┴───────────────────┴───────────────────┘
+
+1 row in set. Elapsed: 0.123 sec. Processed 1.95 million rows, 31.24 MB (15.90 million rows/s., 254.35 MB/s.)
+Peak memory usage: 5.29 MiB.
+
+clickhouse-node1 :) SELECT
+  min(ingest_time) AS first_event_sent,
+  min(store_time) AS first_event_processed
+FROM example.events;
+
+SELECT
+    min(ingest_time) AS first_event_sent,
+    min(store_time) AS first_event_processed
+FROM example.events
+
+Query id: 4ea5e312-c344-40fe-9421-ea6f04045f7a
+
+┌────────first_event_sent─┬───first_event_processed─┐
+│ 2025-12-24 09:43:54.121 │ 2025-12-24 09:43:54.238 │
+└─────────────────────────┴─────────────────────────┘
+
+1 row in set. Elapsed: 0.030 sec. Processed 1.95 million rows, 31.24 MB (64.13 million rows/s., 1.03 GB/s.)
+Peak memory usage: 5.28 MiB.
+
+clickhouse-node1 :) SELECT count(), count(DISTINCT id) FROM example.events;
+
+SELECT
+    count(),
+    countDistinct(id)
+FROM example.events
+
+Query id: d738895d-a873-48bd-a251-fc3fbe1e2f96
+
+┌─count()─┬─uniqExact(id)─┐
+│ 1952643 │       1952643 │
+└─────────┴───────────────┘
+
+1 row in set. Elapsed: 0.370 sec. Processed 1.95 million rows, 43.43 MB (5.27 million rows/s., 117.28 MB/s.)
+Peak memory usage: 240.35 MiB.
+
+clickhouse-node1 :) SELECT sum(cnt) as total_duplicate_rows
+FROM (
+    SELECT count() as cnt
+    FROM example.events
+    GROUP BY id
+    HAVING cnt > 1
+)
+
+SELECT sum(cnt) AS total_duplicate_rows
+FROM
+(
+    SELECT count() AS cnt
+    FROM example.events
+    GROUP BY id
+    HAVING cnt > 1
+)
+
+Query id: 9420634e-6c7b-4c50-8e56-4b6bdc30d745
+
+┌─total_duplicate_rows─┐
+│                    0 │
+└──────────────────────┘
+
+1 row in set. Elapsed: 0.216 sec. Processed 1.95 million rows, 43.43 MB (9.05 million rows/s., 201.36 MB/s.)
+Peak memory usage: 204.72 MiB.
+```
